@@ -3,17 +3,17 @@ import requests
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 
 # Данные бота
-YANDEX_API_KEY = 'ac3b9335-a8aa-4b72-8993-81253dfdc199'  # Новый API-ключ для Яндекс.Карт
+YANDEX_API_KEY = 'ac3b9335-a8aa-4b72-8993-81253dfdc199'
 TOKEN = '7345327846:AAF2HRPVwVnKF5hpHo3u4zmDwSlARQDPRLk'
 bot = telebot.TeleBot(TOKEN)
 
 # Данные пользователя
 user_interests = {}
 user_location = {}
-user_state = {}  # Храним состояние пользователя (например, в какой части процесса он находится)
+user_state = {}
 
-# ID администратора (замените на ваш ID)
-ADMIN_ID = '6118296596'  # Замените на ваш ID
+# ID администратора
+ADMIN_ID = '6118296596'
 
 # Состояния для отслеживания
 STATE_INTEREST = 'interest'
@@ -58,10 +58,10 @@ def handle_feedback(message):
 def receive_feedback(message):
     """Получение отзыва и отправка его администратору"""
     feedback = message.text
-    # Отправляем отзыв администратору
+
     bot.send_message(ADMIN_ID, f"Новый отзыв от пользователя {message.chat.id}:\n{feedback}")
     bot.send_message(message.chat.id, "Спасибо за ваш отзыв! Мы обязательно его рассмотрим.")
-    send_main_menu(message)  # Возвращаем в главное меню
+    send_main_menu(message)
 
 @bot.message_handler(func=lambda message: message.text == "🗺️ Найти места")
 def start_find_places(message):
@@ -112,7 +112,6 @@ def handle_location(message):
         latitude, longitude = message.location.latitude, message.location.longitude
         user_location[message.chat.id] = (latitude, longitude)
 
-        # Получаем интерес пользователя
         interest = user_interests.get(message.chat.id)
         if interest:
             places = search_nearby_places(YANDEX_API_KEY, latitude, longitude, interest)
@@ -137,10 +136,10 @@ def get_nearby_places(query, latitude, longitude, radius=20.0):
         "apikey": YANDEX_API_KEY,
         "text": query,
         "ll": f"{longitude},{latitude}",
-        "spn": f"{radius},{radius}",  # Радиус поиска в 20 км
-        "type": "biz",  # Ищем бизнес-объекты (рестораны, магазины, музеи и т.д.)
+        "spn": f"{radius},{radius}",
+        "type": "biz",
         "lang": "ru_RU",
-        "results": 5  # Максимальное количество результатов
+        "results": 5
     }
 
     response = requests.get(url, params=params)
@@ -165,18 +164,6 @@ def get_nearby_places(query, latitude, longitude, radius=20.0):
 def search_nearby_places(api_key, latitude, longitude, query):
     """Поиск мест по интересу пользователя"""
     return get_nearby_places(query, latitude, longitude)
-
-# Функция для получения IP-адреса пользователя и определения его местоположения
-def get_location_by_ip():
-    """Получение местоположения по IP с помощью ipinfo.io"""
-    response = requests.get("https://ipinfo.io/json")
-    data = response.json()
-    location = data.get("loc", "").split(",")  # Исправление ошибки синтаксиса
-    if len(location) == 2:
-        latitude, longitude = location
-        return float(latitude), float(longitude)
-    else:
-        return None, None
 
 if __name__ == "__main__":
     print("Бот запущен.")
