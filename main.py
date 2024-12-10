@@ -3,8 +3,8 @@ import requests
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 
 # Токен вашего бота
-TOKEN = "ВАШ_ТОКЕН"
-bot = telebot.TeleBot('8006512955:AAF73BS-1stSho8V-qWvoI-Mn7oQXC-9dAA')
+TOKEN = '8006512955:AAF73BS-1stSho8V-qWvoI-Mn7oQXC-9dAA'
+bot = telebot.TeleBot(TOKEN)
 
 # Команда /start
 @bot.message_handler(commands=['start'])
@@ -19,29 +19,26 @@ def send_location_request(message):
   markup.add(location_button)
   bot.send_message(message.chat.id, "Пожалуйста, отправь своё местоположение:", reply_markup=markup)
 
-  # Обработка получения геолокации
+# Обработка получения геолокации
 @bot.message_handler(content_types=['location'])
 def handle_location(message):
   if message.location is not None:
     latitude = message.location.latitude
     longitude = message.location.longitude
 
-    # Получение адреса по координатам
     address = get_address_from_coordinates(latitude, longitude)
     if address:
       bot.reply_to(message, f"Ваше местоположение: {address}")
     else:
       bot.reply_to(message, "Не удалось определить адрес по координатам. Попробуйте ещё раз.")
 
-# Функция для получения адреса по координатам через OpenStreetMap Nominatim
 def get_address_from_coordinates(lat, lon):
   try:
     url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}&zoom=18&addressdetails=1"
-    headers = {"User-Agent": "TelegramBot/1.0 (example@example.com)"}  # Укажите свою почту
+    headers = {"User-Agent": "TelegramBot/1.0 (example@example.com)"}
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
       data = response.json()
-      # Извлечение адреса из ответа
       if "address" in data:
         return data["display_name"]
         return None
