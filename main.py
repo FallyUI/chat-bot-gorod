@@ -2,51 +2,182 @@ import telebot
 import requests
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 
-# Токен вашего бота
-TOKEN = '8006512955:AAF73BS-1stSho8V-qWvoI-Mn7oQXC-9dAA'
+# Данные бота
+YANDEX_API_KEY = 'ac3b9335-a8aa-4b72-8993-81253dfdc199'  # Новый API-ключ для Яндекс.Карт
+TOKEN = '7345327846:AAF2HRPVwVnKF5hpHo3u4zmDwSlARQDPRLk'
 bot = telebot.TeleBot(TOKEN)
 
-# Команда /start
+# Данные пользователя
+user_interests = {}
+user_location = {}
+user_state = {}  # Храним состояние пользователя (например, в какой части процесса он находится)
+
+# ID администратора (замените на ваш ID)
+ADMIN_ID = '6118296596'  # Замените на ваш ID
+
+# Состояния для отслеживания
+STATE_INTEREST = 'interest'
+STATE_LOCATION = 'location'
+STATE_MAIN = 'main'
+STATE_FEEDBACK = 'feedback'
+
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-  bot.reply_to(message, "Привет! Отправь своё местоположение, чтобы узнать адрес.")
-  send_location_request(message)
+    bot.reply_to(message, 'Привет! Это городской бот. Я помогу тебе найти интересные места поблизости.')
+    user_state[message.chat.id] = STATE_MAIN
+    send_main_menu(message)
 
-# Отправка кнопки для запроса местоположения
+def send_main_menu(message):
+    """Главное меню с кнопками"""
+    markup = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    markup.add(KeyboardButton("🗺️ Найти места"), KeyboardButton("❓ Помощь"), KeyboardButton("💬 Оставить отзыв"))
+    bot.send_message(message.chat.id, "Выберите действие:", reply_markup=markup)
+
+@bot.message_handler(func=lambda message: message.text == "❓ Помощь")
+def send_help(message):
+    """Отправка инструкции по использованию бота"""
+    help_text = (
+        "Привет! Я помогу тебе найти интересные места поблизости.\n\n"
+        "Вот как ты можешь использовать бота:\n"
+        "1. Нажми на кнопку '🗺️ Найти места' чтобы начать искать интересные места.\n"
+        "2. Выбери свой интерес из предложенных вариантов (например, 'Еда', 'Спорт', 'Музеи').\n"
+        "3. Отправь своё местоположение, чтобы бот мог найти ближайшие места.\n\n"
+        "Если нужно вернуться назад, нажми '⬅️ Назад'.\n"
+        "Для любых вопросов, ты всегда можешь вернуться сюда, нажав '❓ Помощь'."
+    )
+    bot.send_message(message.chat.id, help_text)
+    send_main_menu(message)
+
+@bot.message_handler(func=lambda message: message.text == "💬 Оставить отзыв")
+def handle_feedback(message):
+    """Запрос отзыва от пользователя"""
+    user_state[message.chat.id] = STATE_FEEDBACK
+    bot.send_message(message.chat.id, "Напишите ваш отзыв или сообщение о проблеме. Мы обязательно рассмотрим его.")
+
+@bot.message_handler(func=lambda message: user_state.get(message.chat.id) == STATE_FEEDBACK)
+def receive_feedback(message):
+    """Получение отзыва и отправка его администратору"""
+    feedback = message.text
+    # Отправляем отзыв администратору
+    bot.send_message(ADMIN_ID, f"Новый отзыв от пользователя {message.chat.id}:\n{feedback}")
+    bot.send_message(message.chat.id, "Спасибо за ваш отзыв! Мы обязательно его рассмотрим.")
+    send_main_menu(message)  # Возвращаем в главное меню
+
+@bot.message_handler(func=lambda message: message.text == "🗺️ Найти места")
+def start_find_places(message):
+    """Начать процесс поиска мест"""
+    user_state[message.chat.id] = STATE_INTEREST
+    send_interest_request(message)
+
+def send_interest_request(message):
+    """Отправка пользователю кнопок с интересами для выбора"""
+    markup = ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    interests = ["🖥 Технологии", "🎮 Игры", "📚 Книги", "🎵 Музыка", "🍕 Еда", "🏃 Спорт", "🏛 Музеи"]
+    buttons = [KeyboardButton(interest) for interest in interests]
+    markup.add(*buttons, KeyboardButton("⬅️ Назад"))
+    bot.send_message(message.chat.id, "Выбери свой интерес:", reply_markup=markup)
+
+@bot.message_handler(func=lambda message: message.text in ["🖥 Технологии", "🎮 Игры", "📚 Книги", "🎵 Музыка", "🍕 Еда", "🏃 Спорт", "🏛 Музеи"])
+def handle_interest(message):
+    """Обработка выбора интереса и запрос местоположения"""
+    user_interests[message.chat.id] = message.text
+    bot.reply_to(message, f"Ты выбрал интерес: {message.text}. Теперь отправь мне своё местоположение, чтобы я мог найти ближайшие места.")
+    user_state[message.chat.id] = STATE_LOCATION
+    send_location_request(message)
+
+@bot.message_handler(func=lambda message: message.text == "⬅️ Назад")
+def handle_back(message):
+    """Обработка нажатия кнопки Назад"""
+    state = user_state.get(message.chat.id, STATE_MAIN)
+
+    if state == STATE_INTEREST:
+        send_main_menu(message)
+    elif state == STATE_LOCATION:
+        send_interest_request(message)
+    else:
+        send_main_menu(message)
+
 def send_location_request(message):
-  markup = ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
-  location_button = KeyboardButton("📍 Отправить местоположение", request_location=True)
-  markup.add(location_button)
-  bot.send_message(message.chat.id, "Пожалуйста, отправь своё местоположение:", reply_markup=markup)
+    """Отправка запроса на получение местоположения"""
+    markup = ReplyKeyboardMarkup(row_width=1, resize_keyboard=True)
+    location_button = KeyboardButton("📍 Отправить местоположение", request_location=True)
+    back_button = KeyboardButton("⬅️ Назад")
+    markup.add(location_button, back_button)
+    bot.send_message(message.chat.id, "Пожалуйста, отправь своё местоположение:", reply_markup=markup)
 
-# Обработка получения геолокации
 @bot.message_handler(content_types=['location'])
 def handle_location(message):
-  if message.location is not None:
-    latitude = message.location.latitude
-    longitude = message.location.longitude
+    """Обработка получения местоположения и поиск ближайших мест"""
+    if message.location:
+        latitude, longitude = message.location.latitude, message.location.longitude
+        user_location[message.chat.id] = (latitude, longitude)
 
-    address = get_address_from_coordinates(latitude, longitude)
-    if address:
-      bot.reply_to(message, f"Ваше местоположение: {address}")
+        # Получаем интерес пользователя
+        interest = user_interests.get(message.chat.id)
+        if interest:
+            places = search_nearby_places(YANDEX_API_KEY, latitude, longitude, interest)
+            send_places(message.chat.id, places)
+        else:
+            bot.send_message(message.chat.id, "Пожалуйста, выбери свой интерес сначала.")
     else:
-      bot.reply_to(message, "Не удалось определить адрес по координатам. Попробуйте ещё раз.")
+        bot.send_message(message.chat.id, "Не удалось получить местоположение. Попробуй снова.")
 
-def get_address_from_coordinates(lat, lon):
-  try:
-    url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lon}&zoom=18&addressdetails=1"
-    headers = {"User-Agent": "TelegramBot/1.0 (example@example.com)"}
-    response = requests.get(url, headers=headers)
+def send_places(chat_id, places):
+    """Отправка списка мест пользователю"""
+    if places:
+        for place in places:
+            bot.send_message(chat_id, place)
+    else:
+        bot.send_message(chat_id, "Не удалось найти подходящие места рядом.")
+
+def get_nearby_places(query, latitude, longitude, radius=20.0):
+    """Поиск ближайших мест с использованием Яндекс.Карт API"""
+    url = "https://search-maps.yandex.ru/v1/"
+    params = {
+        "apikey": YANDEX_API_KEY,
+        "text": query,
+        "ll": f"{longitude},{latitude}",
+        "spn": f"{radius},{radius}",  # Радиус поиска в 20 км
+        "type": "biz",  # Ищем бизнес-объекты (рестораны, магазины, музеи и т.д.)
+        "lang": "ru_RU",
+        "results": 5  # Максимальное количество результатов
+    }
+
+    response = requests.get(url, params=params)
+
     if response.status_code == 200:
-      data = response.json()
-      if "address" in data:
-        return data["display_name"]
-        return None
-  except Exception as e:
-    print(f"Ошибка получения адреса: {e}")
-    return None
+        data = response.json()
+        if 'features' in data:
+            places = []
+            for feature in data["features"]:
+                place = feature["properties"]
+                name = place["name"]
+                address = place.get("description", "Не указано")
+                coordinates = feature["geometry"]["coordinates"]
+                places.append(f"Место: {name}\nАдрес: {address}\nКоординаты: {coordinates}")
+            return places
+        else:
+            return []
+    else:
+        print(f"Ошибка запроса: {response.status_code}, {response.text}")
+        return []
 
-# Запуск бота
+def search_nearby_places(api_key, latitude, longitude, query):
+    """Поиск мест по интересу пользователя"""
+    return get_nearby_places(query, latitude, longitude)
+
+# Функция для получения IP-адреса пользователя и определения его местоположения
+def get_location_by_ip():
+    """Получение местоположения по IP с помощью ipinfo.io"""
+    response = requests.get("https://ipinfo.io/json")
+    data = response.json()
+    location = data.get("loc", "").split(",")  # Исправление ошибки синтаксиса
+    if len(location) == 2:
+        latitude, longitude = location
+        return float(latitude), float(longitude)
+    else:
+        return None, None
+
 if __name__ == "__main__":
-  print("Бот запущен.")
-  bot.infinity_polling()
+    print("Бот запущен.")
+    bot.infinity_polling()
