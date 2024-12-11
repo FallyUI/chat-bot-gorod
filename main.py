@@ -5,8 +5,8 @@ from telebot import types
 from geopy.geocoders import Nominatim
 from geopy.exc import GeopyError
 
-API_2GIS_KEY = '0289f404-c7ac-4866-a2ca-2068601a43b3'
-API_TELEGRAM_TOKEN = "8006512955:AAF73BS-1stSho8V-qWvoI-Mn7oQXC-9dAA"
+API_2GIS_KEY = '' # токен от 2Gis
+API_TELEGRAM_TOKEN = '' # токен от BotFather
 
 bot = telebot.TeleBot(API_TELEGRAM_TOKEN)
 
@@ -156,7 +156,7 @@ def show_help(message):
         "\nМы всегда рады помочь!")
     bot.send_message(message.chat.id, help_text, reply_markup=markup)
 
-@bot.message_handler(func=lambda message: message.text in ['🔍 Найти места', 'Попробовать ещё раз!'])
+@bot.message_handler(func=lambda message: message.text in ['🔍 Найти места', '✨ Попробовать ещё раз!'])
 def your_places_to_find(message):
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     interests = ["🖥 Технологии", "🎮 Игры", "📚 Книги", "🎵 Музыка", "🍕 Еда", "🏃 Спорт", "🏛 Музеи"]
@@ -201,7 +201,10 @@ def handle_search(message, query):
         lon = message.location.longitude
 
     bot.send_message(message.chat.id, f"Ищу места по теме: '{query}' в радиусе {radius} метров...")
-    places = find_places_in_2gis(query, lat, lon, radius)
+    try:
+        places = find_places_in_2gis(query, lat, lon, radius)
+    except Exception:
+        bot.send_message(message.chat.id, f"Ничего не найдено по запросу '{query}' в радиусе {radius} метров.", reply_markup=markup)
 
     if not places:
         bot.send_message(message.chat.id, f"Ничего не найдено по запросу '{query}' в радиусе {radius} метров.", reply_markup=markup)
@@ -209,12 +212,14 @@ def handle_search(message, query):
         response = f"Найденные места в радиусе {radius} метров:\n"
         for i, place in enumerate(places, 1):
             address = get_location_by_coordinates(place["lat"], place["lon"])
+            yandex_maps_url = f'https://yandex.ru/maps/?rtext={lat},{lon}~{place["lat"]},{place["lon"]}&rtt=auto'
             response += (
                 f'{i}. {place["name"]}\n'
                 f'Адрес: г. {address["city"]}, ул. {address["street"]} {address["house_number"]}\n'
                 f'Координаты: {place["lat"]}, {place["lon"]}\n'
-                '— — — — —\n')
-        bot.send_message(message.chat.id, response, reply_markup=markup)
+                f'Открыть в Яндекс.Картах: {yandex_maps_url}\n'
+                '— — — — — — —\n')
+        bot.send_message(message.chat.id, response, reply_markup=markup, disable_web_page_preview = True)
 
 # Запуск бота
 if __name__ == "__main__":
