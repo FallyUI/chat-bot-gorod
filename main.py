@@ -1,19 +1,41 @@
 import telebot
+import json
+import os
 import requests
-from decimal import Decimal
 from telebot import types
 from geopy.geocoders import Nominatim
 from geopy.exc import GeopyError
+from typing import Dict, List
 
-API_2GIS_KEY = '' # токен от 2Gis
+API_2GIS_KEY = '' # токен 2гис
 API_TELEGRAM_TOKEN = '' # токен от BotFather
 
 bot = telebot.TeleBot(API_TELEGRAM_TOKEN)
 
+places_data_json = 'places_data.json'
+database_json = 'user_requests.json'
+
+mcat = ["Рестораны", "Кафе", "Фастфуд", "Столовые", "Пекарни", "Магазины", "Технопарки", "Стартапы", "Гаджеты", "Магазины электроники", "Игровые клубы", "Магазины игр", "Киберспортивные арены", "Библиотеки", "Книжные магазины", "Книжные клубы", "Антикварные магазины", "Концертные залы", "Магазины музыкальных инструментов", "Музеи музыки", "Клубы", "Спортивные клубы", "Фитнес-центры", "Стадионы", "Магазины спортивных товаров", "Государственные музеи", "Музеи искусства", "Музеи науки", "Исторические музеи"]
+
+def load_data():
+    if os.path.exists(places_data_json):
+        with open(places_data_json, "r", encoding="utf-8") as file:
+            data = json.load(file)
+            if data == {}:
+                return {"links": []}
+            else:
+                return data
+    else:
+        return {"links": []}
+
+def save_data(data):
+    with open(places_data_json, "w", encoding="utf-8") as file:
+        json.dump(data, file, indent=4, ensure_ascii=False)
+
 def options_find(message):
     food_options = ["Рестораны", "Кафе", "Фастфуд", "Столовые", "Пекарни", "Магазины"]
     tech_options = ["Технопарки", "Стартапы", "Гаджеты", "Магазины электроники"]
-    game_options = ["Игровые клубы", "Магазины игр", "Игровые консоли",  "Киберспортивные арены"]
+    game_options = ["Игровые клубы", "Магазины игр", "Киберспортивные арены"]
     book_options = ["Библиотеки", "Книжные магазины", "Книжные клубы", "Антикварные магазины"]
     music_options = ["Концертные залы", "Магазины музыкальных инструментов", "Музеи музыки", "Клубы"]
     sport_options = ["Спортивные клубы", "Фитнес-центры", "Стадионы", "Магазины спортивных товаров"]
@@ -97,8 +119,37 @@ def find_places_in_2gis(query, lat, lon, radius=1000):
         print(f"Ошибка при работе с API 2ГИС: {e}")
         return []
 
+def send_feedback(message):
+    developer_id = 5270288334
+    feedback_text = message.text
+    if message.text == 'Назад':
+        start_message(message)
+    else:
+        try:
+            bot.send_message(developer_id, f'Новый отзыв от пользователя {message.from_user.id}:\n{feedback_text}')
+            bot.send_message(message.chat.id, 'Спасибо за Ваш отзыв! Он был отправлен разработчику.')
+        except Exception as e:
+            bot.send_message(message.chat.id, f'Произошла ошибка при отправке отзыва: {e}')
+    start_message(message)
+
+def menu_g_message(message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    find_places_button = types.KeyboardButton('🔍 Найти места')
+    settings_button = types.KeyboardButton('⚙️ Настройки')
+    help_button = types.KeyboardButton('📨 Помощь')
+    feedback_button = types.KeyboardButton('☎️ Обратная связь')
+    markup.add(find_places_button)
+    markup.add(settings_button)
+    markup.add(help_button, feedback_button)
+
+    bot.send_message(message.chat.id, 'Главное меню', reply_markup=markup)
+
 @bot.message_handler(commands=['start'])
 def start_message(message):
+    menu_message(message)
+
+@bot.message_handler(func=lambda message: message.text == 'Назад')
+def go_back(message):
     menu_message(message)
 
 @bot.message_handler(func=lambda message: message.text == '📖 Меню')
@@ -116,9 +167,10 @@ def menu_message(message):
                                       'Это городской бот, который поможет найти интересные места рядом с Вами.\n'
                                       'Для начала работы, Вы можете использовать кнопки ниже!', reply_markup=markup)
 
-@bot.message_handler(func=lambda message: message.text == 'Назад')
-def go_back(message):
-    menu_message(message)
+@bot.message_handler(func=lambda message: message.text == '⚙️ Настройки')
+def settings_handler(message):
+    bot.send_message(message.chat.id, 'Здесь будут Ваши последние запросы:\n'
+                                      '---')
 
 @bot.message_handler(func=lambda message: message.text == '☎️ Обратная связь')
 def feedback_handler(message):
@@ -128,19 +180,6 @@ def feedback_handler(message):
 
     bot.send_message(message.chat.id, 'Напишите свой вопрос или предложение прямо сюда!', reply_markup=markup)
     bot.register_next_step_handler(message, send_feedback)
-
-def send_feedback(message):
-    developer_id = 6118296596
-    feedback_text = message.text
-    if message.text == 'Назад':
-        start_message(message)
-    else:
-        try:
-            bot.send_message(developer_id, f'Новый отзыв от пользователя {message.from_user.id}:\n{feedback_text}')
-            bot.send_message(message.chat.id, 'Спасибо за Ваш отзыв! Он был отправлен разработчику.')
-        except Exception as e:
-            bot.send_message(message.chat.id, f'Произошла ошибка при отправке отзыва: {e}')
-    start_message(message)
 
 @bot.message_handler(func=lambda message: message.text == '📨 Помощь')
 def show_help(message):
@@ -156,7 +195,7 @@ def show_help(message):
         "\nМы всегда рады помочь!")
     bot.send_message(message.chat.id, help_text, reply_markup=markup)
 
-@bot.message_handler(func=lambda message: message.text in ['🔍 Найти места', '✨ Попробовать ещё раз!'])
+@bot.message_handler(func=lambda message: message.text in ['🔍 Найти места', '✨ Попробовать ещё раз'])
 def your_places_to_find(message):
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     interests = ["🖥 Технологии", "🎮 Игры", "📚 Книги", "🎵 Музыка", "🍕 Еда", "🏃 Спорт", "🏛 Музеи"]
@@ -175,8 +214,8 @@ def handle_interest_for(message):
 
     bot.send_message(message.chat.id, 'Выберите подкатегорию:', reply_markup=markup)
 
-@bot.message_handler(func=lambda message: message.text in ["Рестораны", "Кафе", "Фастфуд", "Столовые", "Пекарни", "Магазины", "Технопарки", "Стартапы", "Гаджеты", "Магазины электроники", "Игровые клубы", "Магазины игр", "Игровые консоли",  "Киберспортивные арены", "Библиотеки", "Книжные магазины", "Книжные клубы", "Антикварные магазины", "Концертные залы", "Магазины музыкальных инструментов", "Музеи музыки", "Клубы", "Спортивные клубы", "Фитнес-центры", "Стадионы", "Магазины спортивных товаров", "Государственные музеи", "Музеи искусства", "Музеи науки", "Исторические музеи"])
-def handle_category(message):
+@bot.message_handler(func=lambda message: message.text in mcat)
+def handle_categories(message):
     category = message.text
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     location_button = types.KeyboardButton('📍 Отправить местоположение', request_location=True)
@@ -187,10 +226,37 @@ def handle_category(message):
     bot.send_message(message.chat.id, f'Вы выбрали интерес: {categories}/{category}. Теперь отправьте сюда Ваше местоположение, чтобы я мог найти ближайшие места.', reply_markup=markup)
     bot.register_next_step_handler(message, lambda msg: handle_search(msg, message.text))
 
+@bot.message_handler(func=lambda message: message.text == '🗺️ Показать в мини-приложении')
+def pre_mini(message):
+    data = load_data()
+
+    try:
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        buttons = []
+        for i in range(len(data["links"])):
+            web_app_info = types.WebAppInfo(url=data["links"][i])
+            buttons.append(types.InlineKeyboardButton(text='Перейти', web_app=web_app_info))
+        markup.add(*buttons)
+
+        bot.send_message(message.chat.id, text='Ниже к каждому месту, прикреплена навигация до этого места', reply_markup=markup, disable_web_page_preview=True)
+        del data["links"]
+        save_data(data)
+        menu_g_message(message)
+    except Exception:
+        bot.send_message(message.chat.id, text='Не получилось отправить ссылки(')
+        menu_g_message(message)
+
 def handle_search(message, query):
+    data = load_data()
+    lat = None
+    lon = None
+    places = None
+    
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    restart_button = types.KeyboardButton('✨ Попробовать ещё раз!')
+    app_start_button = types.KeyboardButton('🗺️ Показать в мини-приложении')
+    restart_button = types.KeyboardButton('✨ Попробовать ещё раз')
     menu_button = types.KeyboardButton('📖 Меню')
+    markup.add(app_start_button)
     markup.add(restart_button)
     markup.add(menu_button)
     
@@ -219,7 +285,10 @@ def handle_search(message, query):
                 f'Координаты: {place["lat"]}, {place["lon"]}\n'
                 f'Открыть в Яндекс.Картах: {yandex_maps_url}\n'
                 '— — — — — — —\n')
-        bot.send_message(message.chat.id, response, reply_markup=markup, disable_web_page_preview = True)
+            data["links"].append(yandex_maps_url)
+            save_data(data)
+        bot.send_message(message.chat.id, f'{response}\n'
+                                          f'Для показа навигации в мини-приложении, нажмите кнопку ниже...', reply_markup=markup, disable_web_page_preview=True)
 
 # Запуск бота
 if __name__ == "__main__":
