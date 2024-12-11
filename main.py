@@ -5,7 +5,6 @@ import requests
 from telebot import types
 from geopy.geocoders import Nominatim
 from geopy.exc import GeopyError
-from typing import Dict, List
 
 API_2GIS_KEY = '' # токен 2гис
 API_TELEGRAM_TOKEN = '' # токен от BotFather
