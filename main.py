@@ -6,30 +6,53 @@ from telebot import types
 from geopy.geocoders import Nominatim
 from geopy.exc import GeopyError
 
-API_2GIS_KEY = '' # токен 2гис
+API_2GIS_KEY = '' # токен 2Gis
 API_TELEGRAM_TOKEN = '' # токен от BotFather
 
 bot = telebot.TeleBot(API_TELEGRAM_TOKEN)
 
 places_data_json = 'places_data.json'
 database_json = 'user_requests.json'
+channel_username = '@news_murziki'
+users_json = 'users.json'
 
 mcat = ["Рестораны", "Кафе", "Фастфуд", "Столовые", "Пекарни", "Магазины", "Технопарки", "Стартапы", "Гаджеты", "Магазины электроники", "Игровые клубы", "Магазины игр", "Киберспортивные арены", "Библиотеки", "Книжные магазины", "Книжные клубы", "Антикварные магазины", "Концертные залы", "Магазины музыкальных инструментов", "Музеи музыки", "Клубы", "Спортивные клубы", "Фитнес-центры", "Стадионы", "Магазины спортивных товаров", "Государственные музеи", "Музеи искусства", "Музеи науки", "Исторические музеи"]
 
+def load_users():
+    try:
+        with open(users_json, 'r') as file:
+            return json.load(file)
+    except FileNotFoundError:
+        return []
+
+def save_users(users):
+    with open(users_json, 'w') as file:
+        json.dump(users, file)
+
+def add_user(user_id):
+    users = load_users()
+    if user_id not in users:
+        users.append(user_id)
+        save_users(users)
+
+def notify_users(message):
+    users = load_users()
+    for user_id in users:
+        try:
+            bot.forward_message(chat_id=user_id, from_chat_id=message.chat.id, message_id=message.message_id)
+        except Exception as e:
+            print(f"Ошибка отправки пользователю {user_id}: {e}")
+
 def load_data():
-    if os.path.exists(places_data_json):
+    try:
         with open(places_data_json, "r", encoding="utf-8") as file:
-            data = json.load(file)
-            if data == {}:
-                return {"links": []}
-            else:
-                return data
-    else:
-        return {"links": []}
+            return json.load(file)
+    except FileNotFoundError:
+        return {}
 
 def save_data(data):
     with open(places_data_json, "w", encoding="utf-8") as file:
-        json.dump(data, file, indent=4, ensure_ascii=False)
+        json.dump(data, file, ensure_ascii=False, indent=4)
 
 def options_find(message):
     food_options = ["Рестораны", "Кафе", "Фастфуд", "Столовые", "Пекарни", "Магазины"]
@@ -132,6 +155,16 @@ def send_feedback(message):
     start_message(message)
 
 def menu_g_message(message):
+    data = load_data()
+    data_users = load_users()
+    user_id = str(message.from_user.id)
+
+    if user_id not in data_users:
+        add_user(user_id)
+    
+    if user_id in data:
+        del data[user_id]
+    
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     find_places_button = types.KeyboardButton('🔍 Найти места')
     settings_button = types.KeyboardButton('⚙️ Настройки')
@@ -143,8 +176,19 @@ def menu_g_message(message):
 
     bot.send_message(message.chat.id, 'Главное меню', reply_markup=markup)
 
+@bot.channel_post_handler(func=lambda message: True)
+def channel_message_handler(message):
+    if message.chat.username == channel_username.lstrip("@"):
+        notify_users(message)
+        
 @bot.message_handler(commands=['start'])
 def start_message(message):
+    data_users = load_users()
+    user_id = str(message.from_user.id)
+
+    if user_id not in data_users:
+        add_user(user_id)
+        
     menu_message(message)
 
 @bot.message_handler(func=lambda message: message.text == 'Назад')
@@ -196,6 +240,12 @@ def show_help(message):
 
 @bot.message_handler(func=lambda message: message.text in ['🔍 Найти места', '✨ Попробовать ещё раз'])
 def your_places_to_find(message):
+    data = load_data()
+    user_id = str(message.from_user.id)
+
+    if user_id in data:
+        del data[user_id]
+    
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     interests = ["🖥 Технологии", "🎮 Игры", "📚 Книги", "🎵 Музыка", "🍕 Еда", "🏃 Спорт", "🏛 Музеи"]
     buttons = [types.KeyboardButton(interest) for interest in interests]
@@ -228,17 +278,21 @@ def handle_categories(message):
 @bot.message_handler(func=lambda message: message.text == '🗺️ Показать в мини-приложении')
 def pre_mini(message):
     data = load_data()
-
+    user_id = str(message.from_user.id)
+    
+    if user_id not in data:
+        data[user_id] = []
+    
     try:
         markup = types.InlineKeyboardMarkup(row_width=2)
         buttons = []
-        for i in range(len(data["links"])):
-            web_app_info = types.WebAppInfo(url=data["links"][i])
+        for i in range(len(data[user_id])):
+            web_app_info = types.WebAppInfo(url=data[user_id][i])
             buttons.append(types.InlineKeyboardButton(text='Перейти', web_app=web_app_info))
         markup.add(*buttons)
 
         bot.send_message(message.chat.id, text='Ниже к каждому месту, прикреплена навигация до этого места', reply_markup=markup, disable_web_page_preview=True)
-        del data["links"]
+        del data[user_id]
         save_data(data)
         menu_g_message(message)
     except Exception:
@@ -247,9 +301,13 @@ def pre_mini(message):
 
 def handle_search(message, query):
     data = load_data()
+    user_id = str(message.from_user.id)
     lat = None
     lon = None
     places = None
+
+    if user_id not in data:
+        data[user_id] = []
     
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     app_start_button = types.KeyboardButton('🗺️ Показать в мини-приложении')
@@ -284,7 +342,7 @@ def handle_search(message, query):
                 f'Координаты: {place["lat"]}, {place["lon"]}\n'
                 f'Открыть в Яндекс.Картах: {yandex_maps_url}\n'
                 '— — — — — — —\n')
-            data["links"].append(yandex_maps_url)
+            data[user_id].append(yandex_maps_url)
             save_data(data)
         bot.send_message(message.chat.id, f'{response}\n'
                                           f'Для показа навигации в мини-приложении, нажмите кнопку ниже...', reply_markup=markup, disable_web_page_preview=True)
