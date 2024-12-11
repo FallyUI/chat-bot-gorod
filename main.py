@@ -10,6 +10,46 @@ API_TELEGRAM_TOKEN = "8006512955:AAF73BS-1stSho8V-qWvoI-Mn7oQXC-9dAA"
 
 bot = telebot.TeleBot(API_TELEGRAM_TOKEN)
 
+def options_find(message):
+    food_options = ["Рестораны", "Кафе", "Фастфуд", "Столовые", "Пекарни", "Магазины"]
+    tech_options = ["Технопарки", "Стартапы", "Гаджеты", "Магазины электроники"]
+    game_options = ["Игровые клубы", "Магазины игр", "Игровые консоли",  "Киберспортивные арены"]
+    book_options = ["Библиотеки", "Книжные магазины", "Книжные клубы", "Антикварные магазины"]
+    music_options = ["Концертные залы", "Магазины музыкальных инструментов", "Музеи музыки", "Клубы"]
+    sport_options = ["Спортивные клубы", "Фитнес-центры", "Стадионы", "Магазины спортивных товаров"]
+    museum_options = ["Государственные музеи", "Музеи искусства", "Музеи науки", "Исторические музеи"]
+    
+    if message.text == '🖥 Технологии':
+        return tech_options
+    elif message.text == '🎮 Игры':
+        return game_options
+    elif message.text == '📚 Книги':
+        return book_options
+    elif message.text == '🎵 Музыка':
+        return music_options
+    elif message.text == '🍕 Еда':
+        return food_options
+    elif message.text == '🏃 Спорт':
+        return sport_options
+    elif message.text == '🏛 Музеи':
+        return museum_options
+
+def categories_find(message):
+    if message.text in ["Технопарки", "Стартапы", "Гаджеты", "Магазины электроники"]:
+        return '🖥 Технологии'
+    elif message.text in ["Игровые клубы", "Магазины игр", "Игровые консоли",  "Киберспортивные арены"]:
+        return '🎮 Игры'
+    elif message.text in ["Библиотеки", "Книжные магазины", "Книжные клубы", "Антикварные магазины"]:
+        return '📚 Книги'
+    elif message.text in ["Концертные залы", "Магазины музыкальных инструментов", "Музеи музыки", "Клубы"]:
+        return '🎵 Музыка'
+    elif message.text in ["Рестораны", "Кафе", "Фастфуд", "Столовые", "Пекарни", "Магазины"]:
+        return '🍕 Еда'
+    elif message.text in ["Спортивные клубы", "Фитнес-центры", "Стадионы", "Магазины спортивных товаров"]:
+        return '🏃 Спорт'
+    elif message.text in ["Государственные музеи", "Музеи искусства", "Музеи науки", "Исторические музеи"]:
+        return '🏛 Музеи'
+
 def get_location_by_coordinates(latitude: float, longitude: float) -> dict:
     try:
         geolocator = Nominatim(user_agent="location-finder")
@@ -17,8 +57,8 @@ def get_location_by_coordinates(latitude: float, longitude: float) -> dict:
 
         if location and location.raw:
             address = location.raw.get("address", {})
-            street = address.get("road", "Не найдена")
-            house_number = address.get("house_number", "Не найден")
+            street = address.get("road", "")
+            house_number = address.get("house_number", "")
             city = address.get("city") or address.get("town") or address.get("village", "Не найдено")
             return {
                 "street": street,
@@ -59,15 +99,64 @@ def find_places_in_2gis(query, lat, lon, radius=1000):
 
 @bot.message_handler(commands=['start'])
 def start_message(message):
+    menu_message(message)
+
+@bot.message_handler(func=lambda message: message.text == '📖 Меню')
+def menu_message(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    find_places = types.KeyboardButton('Найти места')
-    markup.add(find_places)
-    
+    find_places_button = types.KeyboardButton('🔍 Найти места')
+    settings_button = types.KeyboardButton('⚙️ Настройки')
+    help_button = types.KeyboardButton('📨 Помощь')
+    feedback_button = types.KeyboardButton('☎️ Обратная связь')
+    markup.add(find_places_button)
+    markup.add(settings_button)
+    markup.add(help_button, feedback_button)
+
     bot.send_message(message.chat.id, 'Приветствую!\n'
                                       'Это городской бот, который поможет найти интересные места рядом с Вами.\n'
                                       'Для начала работы, Вы можете использовать кнопки ниже!', reply_markup=markup)
 
-@bot.message_handler(func=lambda message: message.text in ['Найти места', 'Попробовать ещё раз!'])
+@bot.message_handler(func=lambda message: message.text == 'Назад')
+def go_back(message):
+    menu_message(message)
+
+@bot.message_handler(func=lambda message: message.text == '☎️ Обратная связь')
+def feedback_handler(message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    back_button = types.KeyboardButton('Назад')
+    markup.add(back_button)
+
+    bot.send_message(message.chat.id, 'Напишите свой вопрос или предложение прямо сюда!', reply_markup=markup)
+    bot.register_next_step_handler(message, send_feedback)
+
+def send_feedback(message):
+    developer_id = 6118296596
+    feedback_text = message.text
+    if message.text == 'Назад':
+        start_message(message)
+    else:
+        try:
+            bot.send_message(developer_id, f'Новый отзыв от пользователя {message.from_user.id}:\n{feedback_text}')
+            bot.send_message(message.chat.id, 'Спасибо за Ваш отзыв! Он был отправлен разработчику.')
+        except Exception as e:
+            bot.send_message(message.chat.id, f'Произошла ошибка при отправке отзыва: {e}')
+    start_message(message)
+
+@bot.message_handler(func=lambda message: message.text == '📨 Помощь')
+def show_help(message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    back_button = types.KeyboardButton('Назад')
+    markup.add(back_button)
+
+    help_text = (
+        "Справка по работе с ботом:\n"
+        "1. Используйте кнопку 'Найти места', чтобы выбрать интересы и найти ближайшие места.\n"
+        "2. Отправьте своё местоположение, чтобы бот нашёл интересные места поблизости.\n"
+        "3. Если возникли проблемы, попробуйте снова или напишите разработчику.\n"
+        "\nМы всегда рады помочь!")
+    bot.send_message(message.chat.id, help_text, reply_markup=markup)
+
+@bot.message_handler(func=lambda message: message.text in ['🔍 Найти места', 'Попробовать ещё раз!'])
 def your_places_to_find(message):
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     interests = ["🖥 Технологии", "🎮 Игры", "📚 Книги", "🎵 Музыка", "🍕 Еда", "🏃 Спорт", "🏛 Музеи"]
@@ -76,18 +165,34 @@ def your_places_to_find(message):
     bot.send_message(message.chat.id, "Выбери свой интерес:", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text in ["🖥 Технологии", "🎮 Игры", "📚 Книги", "🎵 Музыка", "🍕 Еда", "🏃 Спорт", "🏛 Музеи"])
-def handle_interest(message):
+def handle_interest_for(message):
+    markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    
+    options = options_find(message)
+
+    buttons = [types.KeyboardButton(option) for option in options]
+    markup.add(*buttons)
+
+    bot.send_message(message.chat.id, 'Выберите подкатегорию:', reply_markup=markup)
+
+@bot.message_handler(func=lambda message: message.text in ["Рестораны", "Кафе", "Фастфуд", "Столовые", "Пекарни", "Магазины", "Технопарки", "Стартапы", "Гаджеты", "Магазины электроники", "Игровые клубы", "Магазины игр", "Игровые консоли",  "Киберспортивные арены", "Библиотеки", "Книжные магазины", "Книжные клубы", "Антикварные магазины", "Концертные залы", "Магазины музыкальных инструментов", "Музеи музыки", "Клубы", "Спортивные клубы", "Фитнес-центры", "Стадионы", "Магазины спортивных товаров", "Государственные музеи", "Музеи искусства", "Музеи науки", "Исторические музеи"])
+def handle_category(message):
+    category = message.text
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     location_button = types.KeyboardButton('📍 Отправить местоположение', request_location=True)
     markup.add(location_button)
 
-    bot.send_message(message.chat.id, f'Вы выбрали интерес: {message.text}. Теперь отправьте сюда Ваше местоположение, чтобы я мог найти ближайшие места.', reply_markup=markup)
+    categories = categories_find(message)
+
+    bot.send_message(message.chat.id, f'Вы выбрали интерес: {categories}/{category}. Теперь отправьте сюда Ваше местоположение, чтобы я мог найти ближайшие места.', reply_markup=markup)
     bot.register_next_step_handler(message, lambda msg: handle_search(msg, message.text))
 
 def handle_search(message, query):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    restart_button = types.KeyboardButton('Попробовать ещё раз!')
+    restart_button = types.KeyboardButton('✨ Попробовать ещё раз!')
+    menu_button = types.KeyboardButton('📖 Меню')
     markup.add(restart_button)
+    markup.add(menu_button)
     
     radius = 1000
 
